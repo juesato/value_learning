@@ -35,9 +35,8 @@ class GRU(object):
     Input: [seq_len * batch_size * input_dim]
     Output: [seq_len * batch_size * hidden_dim]
     """
-    def __init__(self, batch_size, input_dim, hidden_dim,
+    def __init__(self, input_dim, hidden_dim,
              sequence_length):
-        self.batch_size = batch_size
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim
         self.sequence_length = sequence_length
