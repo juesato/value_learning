@@ -1,3 +1,6 @@
+import tensorflow as tf
+from tensorflow.python.ops import control_flow_ops
+
 def init_matrix(shape):
     return tf.random_normal(shape, stddev=0.1)
 
