@@ -66,7 +66,7 @@ class GRU(object):
             body=recurrence,
             loop_vars=(tf.constant(0, dtype=tf.int32),
                        xs,
-                       self.h0, hiddens))
+                       init_state, hiddens))
 
         return self.hiddens
         # self.hiddens = tf.transpose(self.hiddens.stack(), perm=[1, 0, 2])  # batch_size x seq_length x vocab_size
