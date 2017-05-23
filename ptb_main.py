@@ -91,7 +91,7 @@ class PTBInput(object):
     self.batch_size = batch_size = config.batch_size
     self.num_steps = num_steps = config.num_steps
     self.epoch_size = ((len(data) // batch_size) - 1) // num_steps
-    self.input_data, self.targets = reader.ptb_producer(
+    self.input_data, self.targets = ptb_reader.ptb_producer(
         data, batch_size, num_steps, name=name)
 
 
@@ -329,7 +329,7 @@ def main(_):
   if not FLAGS.data_path:
     raise ValueError("Must set --data_path to PTB data directory")
 
-  raw_data = reader.ptb_raw_data(FLAGS.data_path)
+  raw_data = ptb_reader.ptb_raw_data(FLAGS.data_path)
   train_data, valid_data, test_data, _ = raw_data
 
   config = get_config()
