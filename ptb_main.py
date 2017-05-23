@@ -63,6 +63,7 @@ import numpy as np
 import tensorflow as tf
 
 import ptb_reader
+from encoder import GRU
 
 flags = tf.flags
 logging = tf.logging
@@ -151,11 +152,13 @@ class PTBModel(object):
     #     cell, inputs, initial_state=self._initial_state)
     outputs = []
     state = self._initial_state
-    with tf.variable_scope("RNN"):
-      for time_step in range(num_steps):
-        if time_step > 0: tf.get_variable_scope().reuse_variables()
-        (cell_output, state) = cell(inputs[:, time_step, :], state)
-        outputs.append(cell_output)
+    # with tf.variable_scope("RNN"):
+    #   for time_step in range(num_steps):
+    #     if time_step > 0: tf.get_variable_scope().reuse_variables()
+    #     (cell_output, state) = cell(inputs[:, time_step, :], state)
+    #     outputs.append(cell_output)
+    rnn = GRU(size, hidden_size, num_steps)
+    outputs = rnn.build(state, inputs)
 
     output = tf.reshape(tf.stack(axis=1, values=outputs), [-1, size])
     softmax_w = tf.get_variable(
