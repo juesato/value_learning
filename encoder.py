@@ -43,6 +43,7 @@ class GRU(object):
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim
         self.sequence_length = sequence_length
+        self.recurrent_unit = self.create_recurrent_unit()
 
     def build(self, init_state, xs, context=None):
 
@@ -71,16 +72,16 @@ class GRU(object):
         return self.hiddens
         # self.hiddens = tf.transpose(self.hiddens.stack(), perm=[1, 0, 2])  # batch_size x seq_length x vocab_size
 
-    def create_recurrent_unit(self, params):
+    def create_recurrent_unit(self):
         self.W_rx = tf.Variable(init_matrix([self.hidden_dim, self.input_dim]))
         self.W_zx = tf.Variable(init_matrix([self.hidden_dim, self.input_dim]))
         self.W_hx = tf.Variable(init_matrix([self.hidden_dim, self.input_dim]))
         self.U_rh = tf.Variable(init_matrix([self.hidden_dim, self.hidden_dim]))
         self.U_zh = tf.Variable(init_matrix([self.hidden_dim, self.hidden_dim]))
         self.U_hh = tf.Variable(init_matrix([self.hidden_dim, self.hidden_dim]))
-        params.extend([
-            self.W_rx, self.W_zx, self.W_hx,
-            self.U_rh, self.U_zh, self.U_hh])
+        # params.extend([
+        #     self.W_rx, self.W_zx, self.W_hx,
+        #     self.U_rh, self.U_zh, self.U_hh])
 
         def unit(x_t, h_tm1):
             x_t = tf.reshape(x_t, [self.input_dim, 1])
