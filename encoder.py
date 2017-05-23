@@ -44,7 +44,7 @@ class GRU(object):
         self.hidden_dim = hidden_dim
         self.sequence_length = sequence_length
 
-    def build(init_state, xs, context=None):
+    def build(self, init_state, xs, context=None):
 
         # processed for batch
         # with tf.device("/cpu:0"):
