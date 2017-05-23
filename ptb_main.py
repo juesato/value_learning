@@ -157,7 +157,7 @@ class PTBModel(object):
     #     if time_step > 0: tf.get_variable_scope().reuse_variables()
     #     (cell_output, state) = cell(inputs[:, time_step, :], state)
     #     outputs.append(cell_output)
-    rnn = GRU(size, hidden_size, num_steps)
+    rnn = GRU(size, size, num_steps)
     outputs = rnn.build(state, inputs)
 
     output = tf.reshape(tf.stack(axis=1, values=outputs), [-1, size])
