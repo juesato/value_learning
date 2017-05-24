@@ -63,7 +63,9 @@ import numpy as np
 import tensorflow as tf
 
 import ptb_reader
-from encoder import GRU
+from encoder import GRU, init_matrix
+
+from tensorflow.python import debug as tf_debug
 
 flags = tf.flags
 logging = tf.logging
@@ -131,8 +133,6 @@ class PTBModel(object):
     cell = tf.contrib.rnn.MultiRNNCell(
         [attn_cell() for _ in range(config.num_layers)], state_is_tuple=True)
 
-    self._initial_state = cell.zero_state(batch_size, data_type())
-
     with tf.device("/cpu:0"):
       embedding = tf.get_variable(
           "embedding", [vocab_size, size], dtype=data_type())
@@ -150,17 +150,24 @@ class PTBModel(object):
     # inputs = tf.unstack(inputs, num=num_steps, axis=1)
     # outputs, state = tf.contrib.rnn.static_rnn(
     #     cell, inputs, initial_state=self._initial_state)
-    outputs = []
-    state = self._initial_state
-    # with tf.variable_scope("RNN"):
-    #   for time_step in range(num_steps):
-    #     if time_step > 0: tf.get_variable_scope().reuse_variables()
-    #     (cell_output, state) = cell(inputs[:, time_step, :], state)
-    #     outputs.append(cell_output)
-    rnn = GRU(size, size, num_steps)
-    outputs = rnn.build(state, inputs)
 
+    outputs = []
+    self._initial_state = cell.zero_state(batch_size, data_type())
+    state = self._initial_state
+    with tf.variable_scope("RNN"):
+      for time_step in range(num_steps):
+        if time_step > 0: tf.get_variable_scope().reuse_variables()
+        (cell_output, state) = cell(inputs[:, time_step, :], state)
+        outputs.append(cell_output)
     output = tf.reshape(tf.stack(axis=1, values=outputs), [-1, size])
+
+    # self._initial_state = init_matrix([batch_size, size])
+    # state = self._initial_state
+    # inputs = tf.transpose(inputs, perm=[1, 0, 2]) # seq_len x batch_size x dim
+    # rnn = GRU(size, size, num_steps)
+    # outputs = rnn.build(state, inputs)
+    # output = tf.reshape(outputs, [-1, size]) 
+
     softmax_w = tf.get_variable(
         "softmax_w", [size, vocab_size], dtype=data_type())
     softmax_b = tf.get_variable("softmax_b", [vocab_size], dtype=data_type())
@@ -228,7 +235,7 @@ class SmallConfig(object):
   max_max_epoch = 13
   keep_prob = 1.0
   lr_decay = 0.5
-  batch_size = 20
+  batch_size = 16
   vocab_size = 10000
 
 
@@ -296,9 +303,9 @@ def run_epoch(session, model, eval_op=None, verbose=False):
 
   for step in range(model.input.epoch_size):
     feed_dict = {}
-    for i, (c, h) in enumerate(model.initial_state):
-      feed_dict[c] = state[i].c
-      feed_dict[h] = state[i].h
+    # for i, (c, h) in enumerate(model.initial_state):
+    #   feed_dict[c] = state[i].c
+    #   feed_dict[h] = state[i].h
 
     vals = session.run(fetches, feed_dict)
     cost = vals["cost"]
@@ -365,6 +372,11 @@ def main(_):
 
     sv = tf.train.Supervisor(logdir=FLAGS.save_path)
     with sv.managed_session() as session:
+      train_writer = tf.summary.FileWriter('logs/',
+                                      session.graph)
+      # session = tf_debug.LocalCLIDebugWrapperSession(session)
+      # session.add_tensor_filter("has_inf_or_nan", tf_debug.has_inf_or_nan)
+
       for i in range(config.max_max_epoch):
         lr_decay = config.lr_decay ** max(i + 1 - config.max_epoch, 0.0)
         m.assign_lr(session, config.learning_rate * lr_decay)
