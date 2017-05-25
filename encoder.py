@@ -58,9 +58,7 @@ class GRU(object):
 
         def recurrence(i, h_tm1, hs):
             h_t = self.recurrent_unit(xs[i], h_tm1)  # hidden_memory_tuple
-            # hiddens = hiddens.write(i, h_t)
             hs = hs.write(i, h_t)
-            print ("HELLO", h_t)
             # hs.append(h_t)
             return i + 1, h_t, hs
 
@@ -72,17 +70,18 @@ class GRU(object):
                        init_state,
                        hiddens))
 
-        return self.hiddens.stack()
-        # self.hiddens = tf.transpose(self.hiddens.stack(), perm=[1, 0, 2])  # batch_size x seq_length x vocab_size
+        # return self.hiddens.stack()
+        self.hiddens = tf.transpose(self.hiddens.stack(), perm=[1, 0, 2])  # batch_size x seq_length x vocab_size
+        return self.hiddens
 
     def create_recurrent_unit(self):
         with tf.name_scope("GRU"):
-            self.W_rx = tf.Variable(init_matrix([self.hidden_dim, self.input_dim]), name="W_rx")
-            self.W_zx = tf.Variable(init_matrix([self.hidden_dim, self.input_dim]), name="W_zx")
-            self.W_hx = tf.Variable(init_matrix([self.hidden_dim, self.input_dim]), name="W_hx")
-            self.U_rh = tf.Variable(init_matrix([self.hidden_dim, self.hidden_dim]), name="U_rh")
-            self.U_zh = tf.Variable(init_matrix([self.hidden_dim, self.hidden_dim]), name="U_zh")
-            self.U_hh = tf.Variable(init_matrix([self.hidden_dim, self.hidden_dim]), name="U_hh")
+            self.W_rx = tf.get_variable("W_rx", shape=[self.hidden_dim, self.input_dim], dtype=tf.float32)
+            self.W_zx = tf.get_variable("W_zx", shape=[self.hidden_dim, self.input_dim], dtype=tf.float32)
+            self.W_hx = tf.get_variable("W_hx", shape=[self.hidden_dim, self.input_dim], dtype=tf.float32)
+            self.U_rh = tf.get_variable("U_rh", shape=[self.hidden_dim, self.hidden_dim], dtype=tf.float32)
+            self.U_zh = tf.get_variable("U_zh", shape=[self.hidden_dim, self.hidden_dim], dtype=tf.float32)
+            self.U_hh = tf.get_variable("U_hh", shape=[self.hidden_dim, self.hidden_dim], dtype=tf.float32)
         # params.extend([
         #     self.W_rx, self.W_zx, self.W_hx,
         #     self.U_rh, self.U_zh, self.U_hh])
@@ -90,10 +89,6 @@ class GRU(object):
         def unit(x_t, h_tm1):
             # x_t = tf.reshape(x_t, [self.input_dim, 1])
             # h_tm1 = tf.reshape(h_tm1, [self.hidden_dim, 1])
-            print x_t.get_shape().as_list()
-            print h_tm1.get_shape().as_list()
-            print self.W_rx.get_shape().as_list()
-            print self.W_zx.get_shape().as_list()
             r = tf.sigmoid(tf.matmul(x_t, self.W_rx) + tf.matmul(h_tm1, self.U_rh))
             z = tf.sigmoid(tf.matmul(x_t, self.W_zx) + tf.matmul(h_tm1, self.U_zh))
             h_tilda = tf.tanh(tf.matmul(x_t, self.W_hx) + tf.matmul(r * h_tm1, self.U_hh))

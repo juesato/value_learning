@@ -112,6 +112,7 @@ class PTBModel(object):
     # Slightly better results can be obtained with forget gate biases
     # initialized to 1 but the hyperparameters of the model would need to be
     # different than reported in the paper.
+    """
     def lstm_cell():
       # With the latest TensorFlow source code (as of Mar 27, 2017),
       # the BasicLSTMCell will need a reuse parameter which is unfortunately not
@@ -132,14 +133,15 @@ class PTBModel(object):
             lstm_cell(), output_keep_prob=config.keep_prob)
     cell = tf.contrib.rnn.MultiRNNCell(
         [attn_cell() for _ in range(config.num_layers)], state_is_tuple=True)
+    """
 
     with tf.device("/cpu:0"):
       embedding = tf.get_variable(
           "embedding", [vocab_size, size], dtype=data_type())
       inputs = tf.nn.embedding_lookup(embedding, input_.input_data)
 
-    if is_training and config.keep_prob < 1:
-      inputs = tf.nn.dropout(inputs, config.keep_prob)
+    # if is_training and config.keep_prob < 1:
+    #   inputs = tf.nn.dropout(inputs, config.keep_prob)
 
     # Simplified version of models/tutorials/rnn/rnn.py's rnn().
     # This builds an unrolled LSTM for tutorial purposes only.
@@ -151,22 +153,22 @@ class PTBModel(object):
     # outputs, state = tf.contrib.rnn.static_rnn(
     #     cell, inputs, initial_state=self._initial_state)
 
-    outputs = []
-    self._initial_state = cell.zero_state(batch_size, data_type())
-    state = self._initial_state
-    with tf.variable_scope("RNN"):
-      for time_step in range(num_steps):
-        if time_step > 0: tf.get_variable_scope().reuse_variables()
-        (cell_output, state) = cell(inputs[:, time_step, :], state)
-        outputs.append(cell_output)
-    output = tf.reshape(tf.stack(axis=1, values=outputs), [-1, size])
-
-    # self._initial_state = init_matrix([batch_size, size])
+    # outputs = []
     # state = self._initial_state
-    # inputs = tf.transpose(inputs, perm=[1, 0, 2]) # seq_len x batch_size x dim
-    # rnn = GRU(size, size, num_steps)
-    # outputs = rnn.build(state, inputs)
-    # output = tf.reshape(outputs, [-1, size]) 
+    # with tf.variable_scope("RNN"):
+    #   for time_step in range(num_steps):
+    #     if time_step > 0: tf.get_variable_scope().reuse_variables()
+    #     (cell_output, state) = cell(inputs[:, time_step, :], state)
+    #     outputs.append(cell_output)
+    # output = tf.reshape(tf.stack(axis=1, values=outputs), [-1, size])
+
+    self._initial_state = init_matrix([batch_size, size])
+    state = self._initial_state
+    inputs = tf.transpose(inputs, perm=[1, 0, 2]) # seq_len x batch_size x dim
+    self.rnn = GRU(size, size, num_steps)
+    self.debug = tf.reduce_max(self.rnn.U_hh)
+    outputs = self.rnn.build(state, inputs)
+    output = tf.reshape(outputs, [-1, size])
 
     softmax_w = tf.get_variable(
         "softmax_w", [size, vocab_size], dtype=data_type())
@@ -176,20 +178,21 @@ class PTBModel(object):
         [logits],
         [tf.reshape(input_.targets, [-1])],
         [tf.ones([batch_size * num_steps], dtype=data_type())])
+    self.losses = loss
     self._cost = cost = tf.reduce_sum(loss) / batch_size
     self._final_state = state
 
     if not is_training:
       return
 
+  def make_train_ops(self, config):
     self._lr = tf.Variable(0.0, trainable=False)
     tvars = tf.trainable_variables()
-    grads, _ = tf.clip_by_global_norm(tf.gradients(cost, tvars),
+    grads, _ = tf.clip_by_global_norm(tf.gradients(self.cost, tvars),
                                       config.max_grad_norm)
-    optimizer = tf.train.GradientDescentOptimizer(self._lr)
-    self._train_op = optimizer.apply_gradients(
-        zip(grads, tvars),
-        global_step=tf.contrib.framework.get_or_create_global_step())
+    # optimizer = tf.train.GradientDescentOptimizer(self._lr)
+    optimizer = tf.train.AdamOptimizer(learning_rate=0.01)
+    self._train_op = optimizer.apply_gradients(zip(grads, tvars))
 
     self._new_lr = tf.placeholder(
         tf.float32, shape=[], name="new_learning_rate")
@@ -235,41 +238,8 @@ class SmallConfig(object):
   max_max_epoch = 13
   keep_prob = 1.0
   lr_decay = 0.5
-  batch_size = 16
+  batch_size = 48
   vocab_size = 10000
-
-
-class MediumConfig(object):
-  """Medium config."""
-  init_scale = 0.05
-  learning_rate = 1.0
-  max_grad_norm = 5
-  num_layers = 2
-  num_steps = 35
-  hidden_size = 650
-  max_epoch = 6
-  max_max_epoch = 39
-  keep_prob = 0.5
-  lr_decay = 0.8
-  batch_size = 20
-  vocab_size = 10000
-
-
-class LargeConfig(object):
-  """Large config."""
-  init_scale = 0.04
-  learning_rate = 1.0
-  max_grad_norm = 10
-  num_layers = 2
-  num_steps = 35
-  hidden_size = 1500
-  max_epoch = 14
-  max_max_epoch = 55
-  keep_prob = 0.35
-  lr_decay = 1 / 1.15
-  batch_size = 20
-  vocab_size = 10000
-
 
 class TestConfig(object):
   """Tiny config, for testing."""
@@ -297,6 +267,7 @@ def run_epoch(session, model, eval_op=None, verbose=False):
   fetches = {
       "cost": model.cost,
       "final_state": model.final_state,
+      "losses": model.losses
   }
   if eval_op is not None:
     fetches["eval_op"] = eval_op
@@ -310,6 +281,8 @@ def run_epoch(session, model, eval_op=None, verbose=False):
     vals = session.run(fetches, feed_dict)
     cost = vals["cost"]
     state = vals["final_state"]
+    # if not eval_op:
+    #   print ("LOSSES", vals["losses"])
 
     costs += cost
     iters += model.input.num_steps
@@ -355,36 +328,46 @@ def main(_):
       train_input = PTBInput(config=config, data=train_data, name="TrainInput")
       with tf.variable_scope("Model", reuse=None, initializer=initializer):
         m = PTBModel(is_training=True, config=config, input_=train_input)
+      m.make_train_ops(config=config)
       tf.summary.scalar("Training Loss", m.cost)
       tf.summary.scalar("Learning Rate", m.lr)
 
     with tf.name_scope("Valid"):
       valid_input = PTBInput(config=config, data=valid_data, name="ValidInput")
+      # train_input = PTBInput(config=config, data=train_data, name="TrainInput")
       with tf.variable_scope("Model", reuse=True, initializer=initializer):
         mvalid = PTBModel(is_training=False, config=config, input_=valid_input)
+        # mvalid = PTBModel(is_training=False, config=config, input_=train_input)
+      # mvalid.make_train_ops(config=config)
       tf.summary.scalar("Validation Loss", mvalid.cost)
-
+          
     with tf.name_scope("Test"):
       test_input = PTBInput(config=eval_config, data=test_data, name="TestInput")
       with tf.variable_scope("Model", reuse=True, initializer=initializer):
         mtest = PTBModel(is_training=False, config=eval_config,
                          input_=test_input)
 
-    sv = tf.train.Supervisor(logdir=FLAGS.save_path)
-    with sv.managed_session() as session:
+    # sv = tf.train.Supervisor(logdir=FLAGS.save_path)
+    # with sv.managed_session() as session:
+    with tf.Session() as session:
       train_writer = tf.summary.FileWriter('logs/',
                                       session.graph)
       # session = tf_debug.LocalCLIDebugWrapperSession(session)
       # session.add_tensor_filter("has_inf_or_nan", tf_debug.has_inf_or_nan)
+      init_op = tf.global_variables_initializer()
+      session.run(init_op)
+      threads = tf.train.start_queue_runners()
 
       for i in range(config.max_max_epoch):
         lr_decay = config.lr_decay ** max(i + 1 - config.max_epoch, 0.0)
-        m.assign_lr(session, config.learning_rate * lr_decay)
+        # m.assign_lr(session, config.learning_rate * lr_decay)
 
-        print("Epoch: %d Learning rate: %.3f" % (i + 1, session.run(m.lr)))
+        # print("Epoch: %d Learning rate: %.3f" % (i + 1, session.run(m.lr)))
         train_perplexity = run_epoch(session, m, eval_op=m.train_op,
                                      verbose=True)
         print("Epoch: %d Train Perplexity: %.3f" % (i + 1, train_perplexity))
+        print ("DEBUG", session.run(m.debug), m.rnn.U_hh.name)
+        print (session.run(mvalid.debug), mvalid.rnn.U_hh.name)
         valid_perplexity = run_epoch(session, mvalid)
         print("Epoch: %d Valid Perplexity: %.3f" % (i + 1, valid_perplexity))
 
